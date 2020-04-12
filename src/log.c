@@ -8,7 +8,6 @@
 #include "retargetserial.h"
 #include "log.h"
 #include <stdbool.h>
-//#include "timer.h"
 
 #if INCLUDE_LOGGING
 /**
@@ -17,7 +16,7 @@
  */
 uint32_t loggerGetTimestamp(void)
 {
-	return 0;
+	return timerGetRunTimeMilliseconds();
 }
 
 /**

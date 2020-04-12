@@ -48,6 +48,11 @@
 #endif
 
 #include "src/ble_mesh_device_type.h"
+#include "src/log.h"
+#include "src/display.h"
+#include "src/letimer.h"
+#include "src/gpio.h"
+
 
 /***********************************************************************************************//**
  * @addtogroup Application
@@ -131,6 +136,9 @@ int main(void)
   // Initialize application
   initApp();
   initVcomEnable();
+  logInit();
+  gpioInit();
+  displayInit();
 
   // Minimize advertisement latency by allowing the advertiser to always
   // interrupt the scanner.
@@ -149,11 +157,14 @@ int main(void)
   // Initialize coexistence interface. Parameters are taken from HAL config.
   gecko_initCoexHAL();
 
-  while (1) {
-    struct gecko_cmd_packet *evt = gecko_wait_event();
-    bool pass = mesh_bgapi_listener(evt);
-    if (pass) {
-      handle_ecen5823_gecko_event(BGLIB_MSG_ID(evt->header), evt);
-    }
+  while (1)
+  {
+
+	  struct gecko_cmd_packet *evt = gecko_wait_event();
+	  bool pass = mesh_bgapi_listener(evt);
+	  if (pass)
+	  {
+		  handle_ecen5823_gecko_event(BGLIB_MSG_ID(evt->header), evt);
+	  }
   }
 }

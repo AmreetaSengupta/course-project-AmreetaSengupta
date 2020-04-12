@@ -22,6 +22,8 @@
 extern "C" {
 #endif
 
+#define t_handler (12)
+#define time_sec (2*32768)
 /***********************************************************************************************//**
  * \defgroup app Application Code
  * \brief Sample Application Implementation

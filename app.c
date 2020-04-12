@@ -31,8 +31,18 @@
 /* Own header */
 #include "app.h"
 
+#include "src/gpio.h"
+#include "src/ble_mesh_device_type.h"
+#include "src/log.h"
+#include "src/display.h"
+#include "src/gecko_ble_errors.h"
+#include "gpiointerrupt.h"
+
 /// Flag for indicating DFU Reset must be performed
 static uint8_t boot_to_dfu = 0;
+struct gecko_msg_system_get_bt_address_rsp_t *add;
+uint16_t idx_ele = 0;
+uint8_t idx_trans = 0;
 
 /***********************************************************************************************//**
  * @addtogroup Application
@@ -110,6 +120,37 @@ void gecko_bgapi_classes_init_client_lpn(void)
 	gecko_bgapi_class_mesh_scene_client_init();
 }
 
+static void on_off_1(uint16_t idx_mod,
+		uint16_t idx_ele,
+		uint16_t c_add,
+		uint16_t s_add,
+		uint16_t idx_appkey,
+		const struct mesh_generic_request *req,
+		uint32_t tran_time,
+		uint16_t delay_time,
+		uint8_t req_flg)
+{
+	LOG_INFO("on_off_1");
+	if(req->on_off == MESH_GENERIC_ON_OFF_STATE_ON)
+	{
+		displayPrintf(DISPLAY_ROW_TEMPVALUE,"Button Pressed");
+	}
+	else
+	{
+		displayPrintf(DISPLAY_ROW_TEMPVALUE,"Button Released");
+	}
+
+}
+static void on_off_2(uint16_t idx_mod,
+		uint16_t idx_ele,
+		const struct mesh_generic_state *vcurr,
+		const struct mesh_generic_state *vtar,
+		uint32_t rem_time)
+{
+	LOG_INFO("on_off_2");
+}
+
+
 /*******************************************************************************
  * Handling of stack events. Both Bluetooth LE and Bluetooth mesh events
  * are handled here.
@@ -134,15 +175,72 @@ void handle_ecen5823_gecko_event(uint32_t evt_id, struct gecko_cmd_packet *evt)
   if (NULL == evt) {
     return;
   }
-
+  char name[25];
   switch (evt_id) {
     case gecko_evt_system_boot_id:
-    	gecko_cmd_mesh_node_init();
+
+		add = gecko_cmd_system_get_bt_address();
+		uint8_t *pub_add=(uint8_t *)&add->address;
+
+    	if(DEVICE_USES_BLE_MESH_CLIENT_MODEL)
+    	{
+    		displayPrintf(DISPLAY_ROW_NAME,"Publisher");
+    		sprintf(name, "5823Pub %02x%02x", pub_add[1], pub_add[0]);
+    	}
+    	if(DEVICE_USES_BLE_MESH_SERVER_MODEL)
+    	{
+    		displayPrintf(DISPLAY_ROW_NAME,"Subscriber");
+    		sprintf(name, "5823Sub %02x%02x", pub_add[1], pub_add[0]);
+    	}
+
+    	displayPrintf(DISPLAY_ROW_BTADDR,name);
+    	BTSTACK_CHECK_RESPONSE(gecko_cmd_gatt_server_write_attribute_value(gattdb_device_name, 0, strlen(name), (uint8 *)name));
+
+		if(GPIO_PinInGet(Button_port,Button_pin)==0)
+		{
+			displayPrintf(DISPLAY_ROW_ACTION,"Factory Reset");
+			BTSTACK_CHECK_RESPONSE(gecko_cmd_flash_ps_erase_all());
+			BTSTACK_CHECK_RESPONSE(gecko_cmd_hardware_set_soft_timer(time_sec,t_handler,1));
+		}
+		else
+		{
+			BTSTACK_CHECK_RESPONSE(gecko_cmd_mesh_node_init());
+		}
+
       break;
+
+	  case gecko_evt_hardware_soft_timer_id:
+		if(evt->data.evt_hardware_soft_timer.handle == t_handler)
+		{
+			gecko_cmd_system_reset(0);
+		}
+		break;
 
     case gecko_evt_mesh_node_initialized_id:
       if(!evt->data.evt_mesh_node_initialized.provisioned)
-    	  gecko_cmd_mesh_node_start_unprov_beaconing(0x3);   // enable ADV and GATT provisioning bearer
+      {
+    	  BTSTACK_CHECK_RESPONSE(gecko_cmd_mesh_node_start_unprov_beaconing(0x3));   // enable ADV and GATT provisioning bearer
+      }
+      else
+      {
+    	  displayPrintf(DISPLAY_ROW_ACTION,"Provisioned");
+
+    	  if(DEVICE_USES_BLE_MESH_CLIENT_MODEL)
+    	  {
+	  			gecko_cmd_mesh_generic_client_init();
+	  			GPIOINT_Init();
+	  			GPIOINT_CallbackRegister(Button_pin, GPIO_callback);
+	  			LOG_INFO("Return value in mesh_lib_init client is %d",mesh_lib_init(malloc,free,8));
+    	  }
+
+    	  if(DEVICE_USES_BLE_MESH_SERVER_MODEL)
+    	  {
+    		  gecko_cmd_mesh_generic_server_init();
+    		  LOG_INFO("Return value in mesh_lib_init server is %d", mesh_lib_init(malloc,free,9));
+    		  LOG_INFO("Return value in mesh_generic_lib_server_register_handler is %d", mesh_lib_generic_server_register_handler(MESH_GENERIC_ON_OFF_SERVER_MODEL_ID,0,on_off_1,on_off_2,NULL));
+    		  LOG_INFO("Return value in mesh_lib_generic_server_publish is %d", mesh_lib_generic_server_publish(MESH_GENERIC_ON_OFF_SERVER_MODEL_ID,0,mesh_generic_state_on_off));
+    	  }
+      }
       break;
 
     case gecko_evt_le_connection_closed_id:
@@ -167,6 +265,65 @@ void handle_ecen5823_gecko_event(uint32_t evt_id, struct gecko_cmd_packet *evt)
         gecko_cmd_le_connection_close(evt->data.evt_gatt_server_user_write_request.connection);
       }
       break;
+
+	case gecko_evt_mesh_node_provisioned_id:
+		displayPrintf(DISPLAY_ROW_CONNECTION,"Provisioned");
+		break;
+
+	case gecko_evt_mesh_node_provisioning_failed_id:
+		displayPrintf(DISPLAY_ROW_CONNECTION,"Provision Failed");
+		break;
+
+	case gecko_evt_mesh_generic_server_client_request_id:
+		mesh_lib_generic_server_event_handler(evt);
+		break;
+
+	case gecko_evt_mesh_generic_server_state_changed_id:
+		mesh_lib_generic_server_event_handler(evt);
+		break;
+
+	case gecko_evt_le_connection_opened_id:
+		displayPrintf(DISPLAY_ROW_ACTION,"Connected");
+		break;
+
+	case gecko_evt_system_external_signal_id:
+
+		LOG_INFO("Event External Signal");
+		struct mesh_generic_request m_req;
+		m_req.kind= mesh_generic_request_on_off;
+
+		if (evt->data.evt_system_external_signal.extsignals & EVENT_PB0_RISING)
+		{
+			m_req.on_off=MESH_GENERIC_ON_OFF_STATE_ON;
+		    LOG_INFO("Return value in mesh_lib_generic_client_publish is %x",mesh_lib_generic_client_publish(
+					MESH_GENERIC_ON_OFF_CLIENT_MODEL_ID,
+					idx_ele,
+					idx_trans,
+					&m_req,
+					0,
+					0,
+					0
+			));
+		    idx_trans = idx_trans + 1;
+		}
+		if (evt->data.evt_system_external_signal.extsignals & EVENT_PB0_FALLING)
+		{
+			m_req.on_off=MESH_GENERIC_ON_OFF_STATE_OFF;
+			LOG_INFO("Return value in mesh_lib_generic_client_publish is %x",mesh_lib_generic_client_publish(
+					MESH_GENERIC_ON_OFF_CLIENT_MODEL_ID,
+					idx_ele,
+					idx_trans,
+					&m_req,
+					0,     // transition
+					0,
+					0     // flags
+			));
+			idx_trans = idx_trans + 1;
+		}
+		break;
+
+	default:
+		break;
 
   }
 }
