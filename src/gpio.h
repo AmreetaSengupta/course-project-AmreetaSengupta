@@ -23,6 +23,7 @@
 #define LED1_pin 5
 #define Button_port gpioPortF
 #define Button_pin 6
+#define Button1 7
 
 
 void gpioInit();

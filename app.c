@@ -196,7 +196,7 @@ void handle_ecen5823_gecko_event(uint32_t evt_id, struct gecko_cmd_packet *evt)
     	displayPrintf(DISPLAY_ROW_BTADDR,name);
     	BTSTACK_CHECK_RESPONSE(gecko_cmd_gatt_server_write_attribute_value(gattdb_device_name, 0, strlen(name), (uint8 *)name));
 
-		if(GPIO_PinInGet(Button_port,Button_pin)==0)
+		if(GPIO_PinInGet(Button_port,Button_pin) == 0 || GPIO_PinInGet(Button_port,Button1) == 0)
 		{
 			displayPrintf(DISPLAY_ROW_ACTION,"Factory Reset");
 			BTSTACK_CHECK_RESPONSE(gecko_cmd_flash_ps_erase_all());

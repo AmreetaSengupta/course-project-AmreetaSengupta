@@ -18,6 +18,7 @@ void gpioInit()
 	GPIO_PinModeSet(LED1_port, LED1_pin, gpioModePushPull, false);
 
 	GPIO_PinModeSet(Button_port, Button_pin, gpioModeInputPull, true);
+	GPIO_PinModeSet(Button_port, Button1, gpioModeInputPull, true);
 	GPIO_ExtIntConfig(Button_port,Button_pin,Button_pin,true,true,true);
 	NVIC->ISER[(((uint32_t)GPIO_EVEN_IRQn) >> 5UL)] |= (uint32_t)(1UL << (((uint32_t)GPIO_EVEN_IRQn) & 0x1FUL));
 }
